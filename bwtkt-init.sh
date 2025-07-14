@@ -17,11 +17,6 @@ else
     echo "Warning: bwtkt session wrapper not found at $BWTKT_DIR/bw-functions.sh"
 fi
 
-# Add bwtkt utilities to PATH if not already there
-if [[ ":$PATH:" != *":$BWTKT_DIR/bin:"* ]]; then
-    export PATH="$BWTKT_DIR/bin:$PATH"
-fi
-
 # Set up bwtkt environment variables
 export BWTKT_DIR
 export BWTKT_VERSION="0.1.0"
