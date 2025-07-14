@@ -45,8 +45,8 @@ check_expect() {
 setup_permissions() {
     echo "🔧 Setting up file permissions..."
     chmod +x "$BWTKT_DIR/bitwarden-ssh-auto-login/bwssh"
-    chmod +x "$BWTKT_DIR/bitwarden-session-wrapper/bw-functions.sh"
-    chmod +x "$BWTKT_DIR/bitwarden-session-wrapper/setup.sh"
+    chmod +x "$BWTKT_DIR/bw-functions.sh"
+    chmod +x "$BWTKT_DIR/bitwarden-ssh-auto-login/bwssh"
     chmod +x "$BWTKT_DIR/bwtkt-init.sh"
     echo "✅ Permissions set"
 }
