@@ -13,12 +13,6 @@ useConf=0
 confLine=""
 
 confirmBwssh() {
-	# For testing, allow bypass with environment variable
-	if [[ -n "$BWSSH_AUTO_CONFIRM" ]]; then
-		echo "$BWSSH_AUTO_CONFIRM"
-		return
-	fi
-	
 	read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm </dev/tty
 	echo ''
 	if [[ "$confirm" == "" || "$confirm" == "Y" || "$confirm" == "y" ]]; then
