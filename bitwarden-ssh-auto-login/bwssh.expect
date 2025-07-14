@@ -15,16 +15,16 @@ expect {
 		send -- "$password\n"
 		if { [ string length $totp ] != 0 } {
 			expect {
-				-re "Your 2nd factor" {
+				-re "Your 2nd factor.*: $" {
 					send -- "${totp}\n"
 				}
-				-re "(?i)(verification|authenticator|2fa).*" {
+				-re "(?i)(verification|authenticator).*code.*: $" {
 					send -- "${totp}\n"
 				}
-				-re "(?i).*code" {
+				-re "(?i)enter.*code.*: $" {
 					send -- "${totp}\n"
 				}
-				-re "(?i)(totp|token)" {
+				-re "(?i)(totp|token).*code.*: $" {
 					send -- "${totp}\n"
 				}
 			}
