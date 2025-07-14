@@ -18,22 +18,13 @@ expect {
 				-re "Your 2nd factor" {
 					send -- "${totp}\n"
 				}
-				-re "(?i)verification code" {
+				-re "(?i)(verification|authenticator|2fa).*" {
 					send -- "${totp}\n"
 				}
-				-re "(?i)enter.*code" {
+				-re "(?i).*code" {
 					send -- "${totp}\n"
 				}
-				-re "(?i)authenticator code" {
-					send -- "${totp}\n"
-				}
-				-re "(?i)2fa.*code" {
-					send -- "${totp}\n"
-				}
-				-re "(?i)totp" {
-					send -- "${totp}\n"
-				}
-				-re "(?i)token" {
+				-re "(?i)(totp|token)" {
 					send -- "${totp}\n"
 				}
 			}

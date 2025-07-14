@@ -11,10 +11,10 @@ if [[ -f "$BWTKT_DIR/.bwtkt-config" ]]; then
 fi
 
 # Load the Bitwarden session wrapper functions
-if [[ -f "$BWTKT_DIR/bitwarden-session-wrapper/bw-functions.sh" ]]; then
-    source "$BWTKT_DIR/bitwarden-session-wrapper/bw-functions.sh"
+if [[ -f "$BWTKT_DIR/bw-functions.sh" ]]; then
+    source "$BWTKT_DIR/bw-functions.sh"
 else
-    echo "Warning: bwtkt session wrapper not found at $BWTKT_DIR/bitwarden-session-wrapper/bw-functions.sh"
+    echo "Warning: bwtkt session wrapper not found at $BWTKT_DIR/bw-functions.sh"
 fi
 
 # Add bwtkt utilities to PATH if not already there
