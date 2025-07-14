@@ -12,23 +12,40 @@ A robust Bitwarden CLI session management and SSH auto-login integration toolkit
 
 ## Installation
 
-1. Clone or download this repository
-2. Add the following to your `~/.bashrc`:
+1. Clone this repository:
    ```bash
-   source /path/to/bwtkt/bwtkt-init.sh
+   git clone <repository-url> /path/to/bwtkt
+   cd /path/to/bwtkt
    ```
-3. Configure your SSH hosts in `~/.bwssh` (see Configuration section)
+
+2. Run the setup script:
+   ```bash
+   ./setup.sh
+   ```
+
+3. The setup will:
+   - Prompt for your Bitwarden username/email
+   - Create a user-specific configuration in `~/.config/bwtkt/`
+   - Optionally add integration to your `~/.bashrc`
+   - Create a sample SSH configuration file
+
+4. Configure your SSH hosts in `~/.bwssh` (see Configuration section)
 
 ## Structure
 
 ```
 bwtkt/
-├── bw-functions.sh              # Main Bitwarden wrapper functions
-├── bwtkt-init.sh               # Initialization script for .bashrc
-├── bitwarden-ssh-auto-login/   # SSH auto-login components
-│   ├── bwssh                   # SSH wrapper script
-│   └── bwssh.expect           # Expect script for credential injection
-└── README.md                   # This file
+├── bwtkt-functions.sh          # Core Bitwarden wrapper functions (no user config)
+├── bwtkt-init.sh              # Legacy init script (deprecated)
+├── setup.sh                   # Setup script for new users
+├── bitwarden-ssh-auto-login/  # SSH auto-login components
+│   ├── bwssh                  # SSH wrapper script
+│   └── bwssh.expect          # Expect script for credential injection
+└── README.md                  # This file
+
+User files (created by setup):
+~/.config/bwtkt/bwtkt-user-init.sh  # User-specific configuration
+~/.bwssh                            # SSH host mappings
 ```
 
 ## Configuration
@@ -48,9 +65,20 @@ server.example.com,a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
 ### Environment Variables
 
-- `BW_USER`: Your Bitwarden email (set in bw-functions.sh)
+- `BW_USER`: Your Bitwarden email (set during setup)
 - `BWTKT_DIR`: Auto-set to installation directory
 - `BWTKT_VERSION`: Toolkit version
+
+### Finding Bitwarden Object IDs
+
+To find the object IDs for your credentials:
+```bash
+# List all items with names and IDs
+bw list items | jq '.[] | {name, id}'
+
+# Search for specific items
+bw search "server" | jq '.[] | {name, id}'
+```
 
 ## Usage
 
