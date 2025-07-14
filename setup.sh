@@ -127,15 +127,11 @@ cat > "$USER_INIT_SCRIPT" << EOF
 # User-specific configuration
 export BW_USER='$bw_user'
 
-# BWTKT installation directory
-export BWTKT_DIR='$BWTKT_DIR'
-export BWTKT_VERSION='0.2.0'
-
 # Source the main BWTKT functions
-if [[ -f "\$BWTKT_DIR/bwtkt-functions.sh" ]]; then
-    source "\$BWTKT_DIR/bwtkt-functions.sh"
+if [[ -f "$BWTKT_DIR/bwtkt-functions.sh" ]]; then
+    source "$BWTKT_DIR/bwtkt-functions.sh"
 else
-    echo "Error: BWTKT functions not found at \$BWTKT_DIR/bwtkt-functions.sh"
+    echo "Error: BWTKT functions not found at $BWTKT_DIR/bwtkt-functions.sh"
     echo "Please check your BWTKT installation."
 fi
 EOF

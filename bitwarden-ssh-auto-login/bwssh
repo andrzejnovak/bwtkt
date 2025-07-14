@@ -49,41 +49,35 @@ doBwssh() {
 			echo "Session regenerated successfully."
 		fi
 		
-		# Test session validity first without command substitution
+		# Test session validity and get credentials
 		echo "Retrieving credentials..."
 		
-		# Try a test command to see if session is valid - redirect output to avoid command substitution issues
-		local temp_file=$(mktemp)
-		if bw get password $objectId > "$temp_file" 2>&1; then
-			# Command succeeded, read the password
-			local password=$(cat "$temp_file")
-			rm -f "$temp_file"
+		# Try to get password - capture both output and exit code
+		local output
+		if output=$(bw get password $objectId 2>&1); then
+			# Command succeeded, we have the password
+			local password="$output"
 		else
 			# Command failed, check if it's a session issue
-			if grep -q -E "(Invalid master password|Session key is invalid|mac failed|You are not logged in)" "$temp_file"; then
-				rm -f "$temp_file"
+			if [[ "$output" =~ (Invalid master password|Session key is invalid|mac failed|You are not logged in) ]]; then
 				echo "Session invalid or missing. Regenerating session..."
 				# Call regeneration interactively (not in command substitution)
 				if bw --regenerate-session-key; then
 					echo "Session regenerated, retrying credential retrieval..."
 					# Try again after regeneration
-					if bw get password $objectId > "$temp_file" 2>&1; then
-						local password=$(cat "$temp_file")
-						rm -f "$temp_file"
+					if output=$(bw get password $objectId 2>&1); then
+						local password="$output"
 					else
 						echo "Failed to get password even after session regeneration."
-						rm -f "$temp_file"
 						return 1
 					fi
 				else
 					echo "Failed to regenerate session."
-					rm -f "$temp_file"
 					return 1
 				fi
 			else
 				echo "Failed to get password for unknown reason:"
-				cat "$temp_file"
-				rm -f "$temp_file"
+				echo "$output"
 				return 1
 			fi
 		fi
