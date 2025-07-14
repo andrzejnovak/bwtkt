@@ -60,13 +60,8 @@ bw() {
     fi
 
     # If the session key env variable is not set, read it from the file
-    # if file it not there, ask user to regenerate it
-
-    # Check if session directory exists before trying to read the file
-    _check_session_directory || return 1
-
     if [ -z "$bw_session" ]; then
-      # Check if session file exists
+      # Check if session file exists and read it in one sudo call
       if [ ! -f "$bw_session_file" ]; then
         return 1  # No session file, let caller handle this
       fi
@@ -74,10 +69,9 @@ bw() {
       # Try to read the session file
       bw_session="$(sudo cat $bw_session_file 2>/dev/null)"
       local read_exit_code=$?
-      # Don't clear sudo cache here - will be cleared at the end of the bw function call
       
       if [ "$read_exit_code" -ne "0" ] || [ -z "$bw_session" ]; then
-        sudo -k # Clear on error
+        sudo -k # Clear cache only on read error
         return 1  # Couldn't read session, let caller handle this
       fi
     fi
@@ -108,9 +102,7 @@ bw() {
     ${bw_exec} "$@"
     echo "To regenerate your session key type:"
     echo "  bw --regenerate-session-key"
-    ;;
-
-  *)
+    ;;    *)
     _read_token_from_file
 
     # If _read_token_from_file failed, we need to regenerate session and retry
@@ -125,6 +117,7 @@ bw() {
         ${bw_exec} "$@" --session "$bw_session"
       else
         echo "Failed to regenerate session."
+        sudo -k  # Clear cache on error
         return 1
       fi
     else
@@ -132,8 +125,7 @@ bw() {
       ${bw_exec} "$@" --session "$bw_session"
     fi
     
-    # Clear sudo cache after all operations are complete
-    sudo -k
+    # Don't clear sudo cache after successful operations - let it persist for subsequent calls
     ;;
   esac
 }
