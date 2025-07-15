@@ -13,7 +13,7 @@ useConf=0
 confLine=""
 
 confirmBwssh() {
-	read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm </dev/tty
+	read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm < /dev/tty
 	echo ''
 	if [[ "$confirm" == "" || "$confirm" == "Y" || "$confirm" == "y" ]]; then
 		return 0  # Return success for "yes"
@@ -119,6 +119,7 @@ while read line; do
 			useConf=1
 			confLine=$line
 		fi
+		break  # Exit loop after first match to prevent multiple prompts
 	fi
 done <  <(grep . ~/.bwssh)
 
