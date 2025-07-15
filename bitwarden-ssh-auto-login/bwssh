@@ -16,11 +16,11 @@ confirmBwssh() {
 	read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm </dev/tty
 	echo ''
 	if [[ "$confirm" == "" || "$confirm" == "Y" || "$confirm" == "y" ]]; then
-		echo 1
+		return 0  # Return success for "yes"
 	elif [[ "$confirm" == "N" || "$confirm" == "n" ]]; then
-		echo 0
+		return 1  # Return failure for "no"  
 	else
-		confirmBwssh
+		confirmBwssh  # Recursive call for invalid input
 	fi
 }
 
@@ -115,7 +115,7 @@ while read line; do
 		continue
 	fi
 	if [[ "$(echo $cmd | grep $host)" != "" ]]; then
-		if [[ "$(confirmBwssh | tail -1)" == "1" ]]; then
+		if confirmBwssh; then
 			useConf=1
 			confLine=$line
 		fi
