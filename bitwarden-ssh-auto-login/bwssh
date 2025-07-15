@@ -12,18 +12,6 @@ cmd=${@:1}
 useConf=0
 confLine=""
 
-confirmBwssh() {
-	read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm </dev/tty
-	echo ''
-	if [[ "$confirm" == "" || "$confirm" == "Y" || "$confirm" == "y" ]]; then
-		echo 1
-	elif [[ "$confirm" == "N" || "$confirm" == "n" ]]; then
-		echo 0
-	else
-		confirmBwssh
-	fi
-}
-
 doBwssh() {
 	host=$1
 	objectId=$2
@@ -115,10 +103,18 @@ while read line; do
 		continue
 	fi
 	if [[ "$(echo $cmd | grep $host)" != "" ]]; then
-		if [[ "$(confirmBwssh | tail -1)" == "1" ]]; then
+		read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm </dev/tty
+		echo ''
+		if [[ "$confirm" == "" || "$confirm" == "Y" || "$confirm" == "y" ]]; then
 			useConf=1
 			confLine=$line
+		elif [[ "$confirm" == "N" || "$confirm" == "n" ]]; then
+			useConf=0
+		else
+			# Invalid input, ask again
+			continue
 		fi
+		break  # Exit the loop once we've handled the matching host
 	fi
 done <  <(grep . ~/.bwssh)
 
