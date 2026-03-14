@@ -3,11 +3,6 @@ set cmd [lindex $argv 0]
 set password [lindex $argv 1]
 set totp [lindex $argv 2]
 
-# Try to bypass SSH config issues by using -F /dev/null
-if {[lindex $cmd 0] eq "ssh"} {
-    set cmd [linsert $cmd 1 "-F" "/dev/null"]
-}
-
 spawn {*}$cmd
 
 expect {

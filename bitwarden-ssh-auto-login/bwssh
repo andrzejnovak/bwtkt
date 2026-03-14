@@ -95,7 +95,7 @@ doBwssh() {
 		return 1
 	fi
 
-	expect ${SCRIPT_DIR}/bwssh.expect "$cmd" "$password" "$pin"
+	/usr/bin/expect ${SCRIPT_DIR}/bwssh.expect "$cmd" "$password" "$pin"
 }
 
 if [[ ! -f ~/.bwssh ]]; then
