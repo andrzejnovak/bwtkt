@@ -9,22 +9,48 @@ expect {
 	"assword:" {
 		send -- "$password\n"
 		if { [ string length $totp ] != 0 } {
+			# Wait for 2FA prompt and handle it
 			expect {
 				-re "Your 2nd factor.*: $" {
 					send -- "${totp}\n"
+					exp_continue
 				}
 				-re "(?i)(verification|authenticator).*code.*: $" {
 					send -- "${totp}\n"
+					exp_continue
 				}
 				-re "(?i)enter.*code.*: $" {
 					send -- "${totp}\n"
+					exp_continue
 				}
 				-re "(?i)(totp|token).*code.*: $" {
 					send -- "${totp}\n"
+					exp_continue
+				}
+				eof {
+					# Command completed after 2FA
+					wait
+					exit 0
+				}
+				timeout {
+					# Assume interactive session after 2FA
+					interact
+				}
+			}
+		} else {
+			# No 2FA required, check what happens next
+			expect {
+				eof {
+					# Command completed successfully
+					wait
+					exit 0
+				}
+				timeout {
+					# Assume it's an interactive session, start interact mode
+					interact
 				}
 			}
 		}
-		interact
 	}
 	timeout {
 		puts "Timeout waiting for password prompt"

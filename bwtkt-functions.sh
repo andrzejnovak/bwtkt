@@ -10,8 +10,8 @@
 SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
 # Set up SSH and SCP aliases to use the auto-login wrapper
-alias ssh=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh ssh"
-alias scp=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh scp"
+alias ssh=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh /usr/bin/ssh"
+alias scp=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh /usr/bin/scp"
 
 # Check that BW_USER is set (should be set by user's init script)
 if [[ -z "${BW_USER:-}" ]]; then
