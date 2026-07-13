@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# binit — kinit with the password auto-filled from Bitwarden.
+#
+# Usage: binit [kinit options] [principal]
+#   All arguments are passed through to kinit unchanged. The principal is
+#   matched against ~/.binit to find the Bitwarden item holding the password;
+#   if no entry matches, binit falls back to plain interactive kinit.
+#
+# Config (~/.binit): lines of "<principal-pattern> <bitwarden-object-id>".
+#   A line "default <principal>" sets the principal used when none is given
+#   on the command line. '#' comments and blank lines are ignored.
+#
+# Environment overrides:
+#   BINIT_CONFIG  config file (default ~/.binit)
+#   BINIT_KINIT   kinit binary (default: kinit from PATH)
+#   BWTKT_INIT    bwtkt user init script providing the session-managed bw()
+#                 wrapper (default ~/.config/bwtkt/bwtkt-user-init.sh)
+
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+CONFIG_FILE="${BINIT_CONFIG:-$HOME/.binit}"
+KINIT_BIN="${BINIT_KINIT:-kinit}"
+BWTKT_INIT="${BWTKT_INIT:-$HOME/.config/bwtkt/bwtkt-user-init.sh}"
+
+err() { echo >&2 "binit: $*"; }
+
+# --- resolve the principal from the command line -----------------------------
+# The principal is the last non-option argument. MIT kinit options that
+# consume a following value must be skipped so the value isn't mistaken
+# for the principal.
+principal=""
+skip_next=0
+for arg in "$@"; do
+	if (( skip_next )); then
+		skip_next=0
+		continue
+	fi
+	case "$arg" in
+		-l|-s|-r|-c|-I|-t|-T|-S|-X) skip_next=1 ;;
+		-*) ;;
+		*) principal="$arg" ;;
+	esac
+done
+
+kinit_args=("$@")
+
+# --- fill in the default principal from config --------------------------------
+if [[ -z "$principal" && -f "$CONFIG_FILE" ]]; then
+	principal=$(awk '$1 == "default" { print $2; exit }' "$CONFIG_FILE")
+	if [[ -n "$principal" ]]; then
+		kinit_args+=("$principal")
+	fi
+fi
+
+# Last resort: whatever the current ticket cache says.
+if [[ -z "$principal" ]]; then
+	principal=$(klist 2>/dev/null | awk '/^Default principal:/ { print $3; exit }')
+fi
+
+# --- look up the Bitwarden object id ------------------------------------------
+object_id=""
+if [[ -n "$principal" && -f "$CONFIG_FILE" ]]; then
+	while read -r pattern id _; do
+		[[ -z "$pattern" || -z "$id" || "$pattern" == "default" ]] && continue
+		if [[ "${principal,,}" == *"${pattern,,}"* ]]; then
+			object_id="$id"
+			break
+		fi
+	done < <(grep -Ev '^[[:space:]]*(#|$)' "$CONFIG_FILE" | tr ',' ' ')
+fi
+
+if [[ -z "$object_id" ]]; then
+	if [[ -n "$principal" ]]; then
+		err "no ~/.binit entry matches '$principal', falling back to plain kinit"
+	else
+		err "no principal given and none in ~/.binit or the ticket cache, falling back to plain kinit"
+	fi
+	exec "$KINIT_BIN" "$@"
+fi
+
+# --- fetch the password from Bitwarden ----------------------------------------
+# Prefer bwtkt's session-managed bw() wrapper (handles the root-owned session
+# file and regeneration); source it if bw isn't already a function. Fall back
+# to the sibling bwtkt-functions.sh when no user init script exists.
+if [[ "$(type -t bw)" != "function" ]]; then
+	if [[ -f "$BWTKT_INIT" ]]; then
+		source "$BWTKT_INIT"
+	elif [[ -f "$SCRIPT_DIR/../bwtkt-functions.sh" ]]; then
+		source "$SCRIPT_DIR/../bwtkt-functions.sh"
+	fi
+fi
+
+if ! type bw &>/dev/null; then
+	err "bw command required — install from https://bitwarden.com/download/"
+	exit 1
+fi
+
+fetch_password() {
+	local out
+	if out=$(bw get password "$object_id" 2>&1); then
+		# The bwtkt bw() wrapper may print session-management chatter before
+		# the password; the password is always the last line.
+		password="${out##*$'\n'}"
+		[[ -n "$password" ]] && return 0
+	fi
+	if [[ "$out" =~ (Invalid master password|Session key is invalid|mac failed|You are not logged in|Vault is locked|Token not found) ]]; then
+		err "Bitwarden session invalid or locked — regenerating..."
+		if ! bw --regenerate-session-key; then
+			err "failed to regenerate Bitwarden session"
+			return 1
+		fi
+		if out=$(bw get password "$object_id" 2>&1); then
+			password="${out##*$'\n'}"
+			[[ -n "$password" ]] && return 0
+		fi
+	fi
+	err "failed to get password for $object_id:"
+	echo >&2 "$out"
+	return 1
+}
+
+password=""
+echo "binit: fetching password for $principal from Bitwarden..."
+fetch_password || exit 1
+
+# --- run kinit -----------------------------------------------------------------
+# MIT kinit reads the password from stdin when it isn't a tty; printf is a
+# builtin, so the password never appears in the process list.
+printf '%s\n' "$password" | "$KINIT_BIN" "${kinit_args[@]}"
+status=$?
+unset password
+
+if (( status == 0 )); then
+	klist 2>/dev/null | head -6
+else
+	err "kinit failed (exit $status)"
+fi
+exit $status

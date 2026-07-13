@@ -13,6 +13,12 @@ SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 alias ssh=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh /usr/bin/ssh"
 alias scp=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh /usr/bin/scp"
 
+# Expose binit (Bitwarden-backed kinit) on PATH
+case ":$PATH:" in
+    *":${SCRIPT_DIR}/bitwarden-kinit-auto-login:"*) ;;
+    *) export PATH="${SCRIPT_DIR}/bitwarden-kinit-auto-login:$PATH" ;;
+esac
+
 # Check that BW_USER is set (should be set by user's init script)
 if [[ -z "${BW_USER:-}" ]]; then
     echo "Warning: BW_USER not set. Please run the BWTKT setup script."

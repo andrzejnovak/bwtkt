@@ -6,6 +6,7 @@ A Bitwarden CLI session management and SSH auto-login integration toolkit.
 
 - **Automatic session management**: Seamlessly handles Bitwarden CLI session creation and renewal
 - **SSH auto-login**: Automatically inject credentials for SSH connections
+- **Kerberos auto-login**: `binit` wraps `kinit` and auto-fills the password from Bitwarden
 - **Error recovery**: Automatically regenerates sessions when expired or invalid
 
 ## Installation
@@ -56,16 +57,20 @@ If you prefer manual configuration or the setup script doesn't work:
 
 ```
 bwtkt/
-├── bw-functions.sh            # Bitwarden wrapper functions (session management)
-├── setup.sh                   # Interactive setup script for new users
-├── bitwarden-ssh-auto-login/  # SSH auto-login components
-│   ├── bwssh                  # SSH wrapper script
-│   └── bwssh.expect           # Expect script for credential injection
-└── README.md                  # This file
+├── bwtkt-functions.sh           # Bitwarden wrapper functions (session management)
+├── setup.sh                     # Interactive setup script for new users
+├── bitwarden-ssh-auto-login/    # SSH auto-login components
+│   ├── bwssh                    # SSH wrapper script
+│   └── bwssh.expect             # Expect script for credential injection
+├── bitwarden-kinit-auto-login/  # Kerberos auto-login components
+│   ├── binit                    # kinit wrapper script (see its README)
+│   └── README.md
+└── README.md                    # This file
 
 User files (created by setup):
 ~/.config/bwtkt/bwtkt-user-init.sh  # User-specific configuration and sourcing
 ~/.bwssh                            # SSH host mappings (optional)
+~/.binit                            # Kerberos principal mappings (optional)
 ```
 
 ## Configuration
@@ -107,6 +112,10 @@ ssh user@hostname
 
 # SCP with auto-login (if configured)
 scp file.txt user@hostname:/path/
+
+# Kerberos ticket with auto-filled password (if configured in ~/.binit)
+binit                    # default principal
+binit user@REALM.ORG     # explicit principal; kinit options pass through
 ```
 
 ### Session Management and Securit Notes
