@@ -95,6 +95,7 @@ bw() {
     sudo rm -f /var/root/.bitwarden.session && ${bw_exec} logout 2>/dev/null # Invalidate all existing sessions
 
     ${bw_exec} login "${BW_USER}" --raw | sudo tee /var/root/.bitwarden.session &>/dev/null # Generate new session key
+    sudo chmod 600 "$bw_session_file" # sudo tee creates it world-readable; restrict to root
 
     _read_token_from_file --force # Read the new session key for immediate use
     sudo -k                       # De-elevate privileges, only doing this now so _read_token_from_file can resuse the same sudo session
