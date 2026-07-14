@@ -99,13 +99,22 @@ prompts instead of the raw object ID.
 
 ### Managing entries
 
-The easiest way is the `bwtkt` CLI (searches your vault interactively, needs `jq`):
+The smoothest way is doing nothing: the first time you `ssh` a host that has
+no config entry (on a terminal), bwssh offers — once per host, ever — to link
+it to a vault item on the spot, then autofills that same connection. Declined
+hosts are remembered in `~/.cache/bwtkt/offered-hosts` and never asked about
+again; delete a line there to be asked once more.
+
+Or use the `bwtkt` CLI directly (needs `jq`; picking uses `fzf` when
+installed, a numbered list otherwise — a single search hit just confirms):
 ```bash
 bwtkt list                    # show all configured hosts and principals
 bwtkt add lxplus.cern.ch      # map an ssh host to a vault item
+bwtkt add myhost cern         # second argument seeds the vault search
 bwtkt add -k CERN.CH          # map a kerberos principal (for binit)
 bwtkt doctor                  # sanity-check the installation
 ```
+`BWTKT_ASSUME_YES=1` answers confirmation prompts automatically (scripting).
 
 Or find object IDs by hand:
 ```bash

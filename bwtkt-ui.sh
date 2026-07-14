@@ -22,7 +22,9 @@ ui_warn() { echo >&2 "${_ui_yellow}!${_ui_reset} $*"; }
 ui_err()  { echo >&2 "${_ui_red}✗${_ui_reset} $*"; }
 
 # ui_confirm "question" -> 0 on yes (default), 1 on no
+# BWTKT_ASSUME_YES=1 answers yes without prompting (for scripted use)
 ui_confirm() {
+	[[ "${BWTKT_ASSUME_YES:-}" == "1" ]] && return 0
 	local reply
 	while true; do
 		read -r -p "$(_ui_tag) $* ${_ui_bold}[Y/n]${_ui_reset} " reply < /dev/tty || return 1

@@ -121,13 +121,17 @@ if [[ ! -f "$BWSSH_CONFIG" ]]; then
 	return
 fi
 
-targetHost=$(_bwssh_target_host $cmd)
-useConf=0
-confHost=""
-confId=""
-confLabel=""
-
-if [[ -n "$targetHost" ]]; then
+# Scan the config for an entry matching targetHost. Sets matched/useConf and
+# the conf* variables. assumeYes=1 skips the confirmation prompt (used right
+# after the user has just chosen to link the host).
+_bwssh_scan_config() {
+	local assumeYes=${1:-0} pattern objectId label autoYes
+	matched=0
+	useConf=0
+	confHost=""
+	confId=""
+	confLabel=""
+	[[ -n "$targetHost" ]] || return 0
 	while read -r pattern objectId label; do
 		[[ -z "$pattern" || -z "$objectId" || "$pattern" == \#* ]] && continue
 		autoYes=0
@@ -136,7 +140,8 @@ if [[ -n "$targetHost" ]]; then
 			pattern="${pattern#!}"
 		fi
 		if [[ "$targetHost" == *"$pattern"* ]]; then
-			if (( autoYes )) || ui_confirm "$targetHost — autofill \"${label:-${objectId:0:8}…}\"?"; then
+			matched=1
+			if (( autoYes || assumeYes )) || ui_confirm "$targetHost — autofill \"${label:-${objectId:0:8}…}\"?"; then
 				useConf=1
 				confHost=$pattern
 				confId=$objectId
@@ -145,6 +150,25 @@ if [[ -n "$targetHost" ]]; then
 			break  # first match wins; never prompt twice
 		fi
 	done < <(tr ',' ' ' < "$BWSSH_CONFIG")
+}
+
+# First connection to a host with no config entry, on a terminal: offer —
+# once per host, ever — to link it to a vault item on the spot. Declined or
+# irrelevant hosts are remembered and never asked about again.
+_bwssh_offer_link() {
+	local cache="$HOME/.cache/bwtkt/offered-hosts" reply
+	[[ -t 0 && -r /dev/tty ]] || return 1
+	grep -qxF "$targetHost" "$cache" 2>/dev/null && return 1
+	mkdir -p "${cache%/*}" && printf '%s\n' "$targetHost" >> "$cache"
+	read -r -p "$(_ui_tag) no vault link for ${targetHost} — add one? [y/N] " reply < /dev/tty || return 1
+	[[ "$reply" =~ ^[Yy]$ ]] || return 1
+	"${SCRIPT_DIR}/../bin/bwtkt" add "$targetHost"
+}
+
+targetHost=$(_bwssh_target_host $cmd)
+_bwssh_scan_config
+if (( ! matched )) && _bwssh_offer_link; then
+	_bwssh_scan_config 1  # pick up the fresh entry, no second question
 fi
 
 if (( useConf )); then
