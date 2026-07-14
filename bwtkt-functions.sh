@@ -75,9 +75,12 @@ bw() {
       # Try to read the session file
       bw_session="$(sudo cat $bw_session_file 2>/dev/null)"
       local read_exit_code=$?
-      
+      # Drop the cached sudo timestamp immediately: otherwise any process
+      # running as this user could silently re-read the session key for the
+      # duration of the sudo cache window (~15 min by default)
+      sudo -k
+
       if [ "$read_exit_code" -ne "0" ] || [ -z "$bw_session" ]; then
-        sudo -k # Clear cache only on read error
         return 1  # Couldn't read session, let caller handle this
       fi
     fi
@@ -135,8 +138,6 @@ bw() {
       # We have a valid session, run the command
       BW_SESSION="$bw_session" ${bw_exec} "$@"
     fi
-    
-    # Don't clear sudo cache after successful operations - let it persist for subsequent calls
     ;;
   esac
 }
