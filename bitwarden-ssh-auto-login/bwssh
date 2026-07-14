@@ -109,6 +109,47 @@ if [[ ! -f ~/.bwssh ]]; then
 	return
 fi
 
+# Extract the destination host from an ssh/scp command line, so config
+# patterns are matched only against the host actually being connected to —
+# never against option values, file names, or remote commands.
+_bwssh_target_host() {
+	local prog valopts skip=0 arg target=""
+	prog="$(basename "$1")"
+	shift
+	if [[ "$prog" == scp* ]]; then
+		valopts=" -o -P -i -c -F -J -l -S -D -X "
+	else
+		valopts=" -b -B -c -D -E -e -F -I -i -J -L -l -m -o -O -p -Q -R -S -w -W "
+	fi
+	for arg in "$@"; do
+		if (( skip )); then
+			skip=0
+			continue
+		fi
+		if [[ "$arg" == -* ]]; then
+			[[ "$valopts" == *" $arg "* ]] && skip=1
+			continue
+		fi
+		if [[ "$prog" == scp* ]]; then
+			# remote spec looks like [user@]host:path
+			if [[ "$arg" == *:* ]]; then
+				target="${arg%%:*}"
+				break
+			fi
+		else
+			# first non-option argument is the ssh destination
+			target="$arg"
+			break
+		fi
+	done
+	target="${target##*@}"
+	target="${target#[}"
+	target="${target%]}"
+	echo "$target"
+}
+
+targetHost=$(_bwssh_target_host $cmd)
+
 while read line; do
 	if [[ "$(echo $line | grep '^#')" != "" ]]; then
 		continue
@@ -119,7 +160,7 @@ while read line; do
 	if [[ "$host" == "" || "$objectId" == "" ]]; then
 		continue
 	fi
-	if [[ "$(echo $cmd | grep $host)" != "" ]]; then
+	if [[ -n "$targetHost" && "$targetHost" == *"$host"* ]]; then
 		if confirmBwssh; then
 			useConf=1
 			confLine=$line
