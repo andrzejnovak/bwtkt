@@ -3,11 +3,11 @@
 # Sourced via the ssh/scp aliases set up in bwtkt-functions.sh.
 #
 # Config (~/.bwssh): lines of "<host-pattern> <object-id> [label...]"
-#   (comma- or whitespace-separated; '#' comments allowed). Patterns are
-#   matched as substrings of the destination host only — never against
-#   option values, file names, or remote commands. Prefix a pattern with
-#   '!' to skip the confirmation prompt for that host. The optional label
-#   is shown in prompts instead of the raw object id.
+#   (comma- or whitespace-separated; '#' comments allowed). Patterns match
+#   the destination host on dot-label boundaries — never option values,
+#   file names, or remote commands. Prefix a pattern with '!' to skip the
+#   confirmation prompt; honored only when the pattern is the exact host.
+#   The optional label is shown in prompts instead of the raw object id.
 #
 # Commands to hosts with no matching entry run exactly like plain ssh/scp.
 
@@ -121,6 +121,14 @@ if [[ ! -f "$BWSSH_CONFIG" ]]; then
 	return
 fi
 
+# Does the pattern match the host on dot-label boundaries? "cern" matches
+# "lxplus.cern.ch" and "cern", but not "cern-fake.net" or "mycern.ch" —
+# a plain substring test would hand credentials to typosquatted domains.
+_bwssh_host_matches() {
+	local host=".${1,,}." pattern=".${2,,}."
+	[[ "$host" == *"$pattern"* ]]
+}
+
 # Scan the config for an entry matching targetHost. Sets matched/useConf and
 # the conf* variables. assumeYes=1 skips the confirmation prompt (used right
 # after the user has just chosen to link the host).
@@ -139,8 +147,12 @@ _bwssh_scan_config() {
 			autoYes=1
 			pattern="${pattern#!}"
 		fi
-		if [[ "$targetHost" == *"$pattern"* ]]; then
+		if _bwssh_host_matches "$targetHost" "$pattern"; then
 			matched=1
+			# '!' skips the confirmation only when the pattern is the exact
+			# host: the prompt is the human check that keeps a convenience
+			# pattern from auto-sending credentials to a look-alike domain
+			[[ "${targetHost,,}" != "${pattern,,}" ]] && autoYes=0
 			if (( autoYes || assumeYes )) || ui_confirm "$targetHost — autofill \"${label:-${objectId:0:8}…}\"?"; then
 				useConf=1
 				confHost=$pattern

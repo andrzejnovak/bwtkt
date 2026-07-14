@@ -22,9 +22,12 @@ first contact (once per host; declined hosts are remembered in
 ~/.cache/bwtkt/offered-hosts).
 
 Config formats (whitespace- or comma-separated, '#' comments):
-  ~/.bwssh    <host-pattern>  <object-id>  [label...]     ('!' prefix = no confirm)
+  ~/.bwssh    <host-pattern>  <object-id>  [label...]
   ~/.binit    <principal-pattern>  <object-id>  [label...]
               default  <principal>
+Host patterns match on dot-label boundaries ("cern" matches lxplus.cern.ch,
+never cern-fake.net). A '!' prefix skips the confirm prompt, honored only
+when the pattern is the exact host.
 EOF
 }
 
@@ -127,6 +130,9 @@ cmd_add() {
 	else
 		name=$(jq -r --arg id "$id" '.[] | select(.id == $id).name' <<<"$items")
 	fi
+	# Vault item names are free text — flatten whitespace so a crafted name
+	# can't inject extra config lines
+	name="${name//[$'\n\r\t']/ }"
 	printf '%s  %s  %s\n' "$pattern" "$id" "$name" >> "$conf"
 	chmod 600 "$conf" 2>/dev/null
 	ui_ok "added: $pattern → \"$name\"  ($conf)"

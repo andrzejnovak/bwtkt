@@ -93,9 +93,11 @@ lxplus.cern.ch   12345678-1234-1234-1234-123456789abc  CERN
 !dev.example.com a1b2c3d4-e5f6-7890-abcd-ef1234567890  dev box
 ```
 
-Patterns are matched as substrings of the destination host only. A `!` prefix
-skips the confirmation prompt for that host. The optional label is shown in
-prompts instead of the raw object ID.
+Patterns are matched against the destination host on dot-label boundaries:
+`cern` matches `lxplus.cern.ch` and `cern`, but never `cern-fake.net`. A `!`
+prefix skips the confirmation prompt — honored only when the pattern is the
+exact host, so catch-all patterns always keep the human check. The optional
+label is shown in prompts instead of the raw object ID.
 
 ### Managing entries
 
