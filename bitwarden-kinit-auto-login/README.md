@@ -34,19 +34,16 @@ this directory on `PATH`, so `binit` is available directly. Alternatively:
 ln -s /path/to/bwtkt/bitwarden-kinit-auto-login/binit ~/.local/bin/binit
 ```
 
-Create `~/.binit`:
+Create `~/.binit` (or run `bwtkt add -k <pattern>`):
 
 ```
-# <principal-pattern>  <bitwarden-object-id>
+# <principal-pattern>  <bitwarden-object-id>  [label...]
 default  user@CERN.CH
-CERN.CH  12345678-1234-1234-1234-123456789abc
+CERN.CH  12345678-1234-1234-1234-123456789abc  CERN
 ```
 
-Find object IDs with:
-
-```bash
-bw list items --search "cern" | jq '.[] | {name, id}'
-```
+The optional label is shown in messages instead of the raw object ID.
+See `binit --help` and `bwtkt list`.
 
 ## Environment overrides
 

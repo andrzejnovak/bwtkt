@@ -9,20 +9,25 @@
 # Get the directory where this script is located
 SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
+# Shared terminal UI helpers (ui_info/ui_ok/ui_warn/ui_err/ui_confirm)
+source "${SCRIPT_DIR}/bwtkt-ui.sh"
+
 # Set up SSH and SCP aliases to use the auto-login wrapper
 alias ssh=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh /usr/bin/ssh"
 alias scp=". ${SCRIPT_DIR}/bitwarden-ssh-auto-login/bwssh /usr/bin/scp"
 
-# Expose binit (Bitwarden-backed kinit) on PATH
-case ":$PATH:" in
-    *":${SCRIPT_DIR}/bitwarden-kinit-auto-login:"*) ;;
-    *) export PATH="${SCRIPT_DIR}/bitwarden-kinit-auto-login:$PATH" ;;
-esac
+# Expose binit (Bitwarden-backed kinit) and the bwtkt CLI on PATH
+for _bwtkt_dir in "${SCRIPT_DIR}/bitwarden-kinit-auto-login" "${SCRIPT_DIR}/bin"; do
+    case ":$PATH:" in
+        *":${_bwtkt_dir}:"*) ;;
+        *) export PATH="${_bwtkt_dir}:$PATH" ;;
+    esac
+done
+unset _bwtkt_dir
 
 # Check that BW_USER is set (should be set by user's init script)
 if [[ -z "${BW_USER:-}" ]]; then
-    echo "Warning: BW_USER not set. Please run the BWTKT setup script."
-    echo "Or manually set: export BW_USER='your-bitwarden-email'"
+    ui_warn "BW_USER not set — run the BWTKT setup script or: export BW_USER='your-bitwarden-email'"
 fi
 
 bw() {
@@ -89,8 +94,8 @@ bw() {
   }
 
   case $1 in
-  '--regenerate-session-key')
-    echo "Regenerating session key, this has invalidated all existing sessions..."
+  'relogin' | '--regenerate-session-key')
+    ui_info "regenerating session key — this invalidates all existing sessions"
     
     # Check if session directory exists before trying to create the session file
     _check_session_directory || return 1
@@ -112,25 +117,25 @@ bw() {
 
   '--help' | '-h' | '')
     ${bw_exec} "$@"
-    echo "To regenerate your session key type:"
-    echo "  bw --regenerate-session-key"
-    ;;    *)
+    ui_info "to renew the bwtkt session key: bw relogin"
+    ;;
+
+  *)
     _read_token_from_file
 
     # If _read_token_from_file failed, we need to regenerate session and retry
     if [ $? -ne 0 ]; then
-      echo "No valid session found. Regenerating session..."
-      
+      ui_warn "no valid Bitwarden session — logging in"
+
       # Regenerate session first
-      if bw --regenerate-session-key; then
-        echo "Session regenerated successfully. Retrying command..."
+      if bw relogin; then
         # Now retry the original command
         _read_token_from_file --force
         # Pass the session via the environment, not --session: argv is
         # world-readable in /proc/*/cmdline, the environment is not
         BW_SESSION="$bw_session" ${bw_exec} "$@"
       else
-        echo "Failed to regenerate session."
+        ui_err "Bitwarden login failed"
         sudo -k  # Clear cache on error
         return 1
       fi

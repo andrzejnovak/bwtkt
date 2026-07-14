@@ -1,113 +1,71 @@
 #!/usr/bin/env bash
-echo "Bitwarden SSH auto-login wrapper"
-SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+# bwssh — ssh/scp with the password auto-filled from Bitwarden.
+# Sourced via the ssh/scp aliases set up in bwtkt-functions.sh.
+#
+# Config (~/.bwssh): lines of "<host-pattern> <object-id> [label...]"
+#   (comma- or whitespace-separated; '#' comments allowed). Patterns are
+#   matched as substrings of the destination host only — never against
+#   option values, file names, or remote commands. Prefix a pattern with
+#   '!' to skip the confirmation prompt for that host. The optional label
+#   is shown in prompts instead of the raw object id.
+#
+# Commands to hosts with no matching entry run exactly like plain ssh/scp.
 
-if [[ "$(which bw)" == "" ]]; then
-	echo >&2 "bw command required!"
-	echo >&2 "Install via https://github.com/bitwarden/cli"
-	return
-fi
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+source "${SCRIPT_DIR}/../bwtkt-ui.sh"
+UI_PREFIX=bwssh
+BWSSH_CONFIG="${BWSSH_CONFIG:-$HOME/.bwssh}"
 
 cmd=${@:1}
-useConf=0
-confLine=""
-
-confirmBwssh() {
-	read -p "Exec [$cmd] with bitwarden credential? [Y/n] " confirm < /dev/tty
-	echo ''
-	if [[ "$confirm" == "" || "$confirm" == "Y" || "$confirm" == "y" ]]; then
-		return 0  # Return success for "yes"
-	elif [[ "$confirm" == "N" || "$confirm" == "n" ]]; then
-		return 1  # Return failure for "no"  
-	else
-		confirmBwssh  # Recursive call for invalid input
-	fi
-}
 
 doBwssh() {
-	host=$1
-	objectId=$2
+	local host=$1 objectId=$2 label=$3
+	local password="" pin="" output=""
 
-	# Check if bw function is available
-	if type bw >/dev/null 2>&1 && [[ "$(type -t bw)" == "function" ]]; then
-		echo "Using bw wrapper function for credentials..."
-		
-		# Check if the session file that our bw wrapper uses exists
-		local session_file='/var/root/.bitwarden.session'
-		if [[ ! -f "$session_file" ]]; then
-			echo "No Bitwarden session file found. Regenerating session key..."
+	if [[ "$(type -t bw)" == "function" ]]; then
+		# bwtkt session-managed wrapper available
+		if [[ ! -f /var/root/.bitwarden.session ]]; then
+			ui_info "no Bitwarden session — logging in"
 			if ! bw --regenerate-session-key; then
-				echo "Failed to regenerate session."
+				ui_err "Bitwarden login failed"
 				return 1
 			fi
-			echo "Session regenerated successfully."
 		fi
-		
-		# Test session validity and get credentials
-		echo "Retrieving credentials..."
-		
-		# Try to get password - capture both output and exit code
-		local output
 		if output=$(bw get password $objectId 2>&1); then
-			# Command succeeded, we have the password. The bw wrapper may
-			# print session chatter first; the password is the last line.
-			local password="${output##*$'\n'}"
-		else
-			# Command failed, check if it's a session issue
-			if [[ "$output" =~ (Invalid master password|Session key is invalid|mac failed|You are not logged in) ]]; then
-				echo "Session invalid or missing. Regenerating session..."
-				# Call regeneration interactively (not in command substitution)
-				if bw --regenerate-session-key; then
-					echo "Session regenerated, retrying credential retrieval..."
-					# Try again after regeneration
-					if output=$(bw get password $objectId 2>&1); then
-						local password="${output##*$'\n'}"
-					else
-						echo "Failed to get password even after session regeneration."
-						return 1
-					fi
-				else
-					echo "Failed to regenerate session."
-					return 1
-				fi
-			else
-				echo "Failed to get password for unknown reason:"
-				echo "$output"
-				return 1
+			# The wrapper may print session chatter before the password;
+			# the password is always the last line.
+			password="${output##*$'\n'}"
+		elif [[ "$output" =~ (Invalid master password|Session key is invalid|mac failed|You are not logged in|Vault is locked|Token not found) ]]; then
+			ui_warn "Bitwarden session invalid — regenerating"
+			if bw --regenerate-session-key && output=$(bw get password $objectId 2>&1); then
+				password="${output##*$'\n'}"
 			fi
 		fi
-		
-		# Get TOTP - session should be valid now (last line, see above)
-		local pin=$(bw get totp $objectId 2>/dev/null)
+		if [[ -z "$password" ]]; then
+			ui_err "could not fetch \"${label:-$objectId}\": ${output##*$'\n'}"
+			ui_info "try: bw relogin"
+			return 1
+		fi
+		pin=$(bw get totp $objectId 2>/dev/null)
 		pin="${pin##*$'\n'}"
 	else
-		echo "bw wrapper function not available, using raw bw command..."
-		# Fall back to raw bw command
-		local password=$(command bw get password $objectId 2>/dev/null)
-		local pin=$(command bw get totp $objectId 2>/dev/null)
-	fi
-	
-	if [[ -z "$password" ]]; then
-		echo "Failed to get password for object ID: $objectId"
-		echo "This might indicate:"
-		echo "  1. You're not logged into Bitwarden (run: bw --regenerate-session-key)"
-		echo "  2. Invalid object ID: $objectId"
-		echo "  3. Object doesn't exist or you don't have access"
-		echo "  4. Expired session (run: bw --regenerate-session-key)"
-		return 1
+		# Raw bw CLI fallback (no session management)
+		password=$(command bw get password $objectId 2>/dev/null)
+		password="${password##*$'\n'}"
+		pin=$(command bw get totp $objectId 2>/dev/null)
+		pin="${pin##*$'\n'}"
+		if [[ -z "$password" ]]; then
+			ui_err "could not fetch \"${label:-$objectId}\" — is the vault unlocked?"
+			return 1
+		fi
 	fi
 
-	# Pass secrets via the environment, not argv: /proc/*/cmdline is
-	# world-readable and expect stays alive for the whole ssh session.
-	# Absolute expect path avoids snap confinement issues.
+	ui_ok "autofilling password${pin:+ + TOTP} for \"${label:-${objectId:0:8}…}\""
+	# Secrets via the environment, not argv: /proc/*/cmdline is world-readable
+	# and expect stays alive for the whole ssh session. Absolute expect path
+	# avoids snap confinement issues.
 	BWSSH_PASSWORD="$password" BWSSH_TOTP="$pin" /usr/bin/expect ${SCRIPT_DIR}/bwssh.expect "$cmd"
 }
-
-if [[ ! -f ~/.bwssh ]]; then
-	echo >&2 "Waring: This command only works when ssh host & bitwarden object id specified in ~/.bwssh"
-	$cmd
-	return
-fi
 
 # Extract the destination host from an ssh/scp command line, so config
 # patterns are matched only against the host actually being connected to —
@@ -148,29 +106,48 @@ _bwssh_target_host() {
 	echo "$target"
 }
 
-targetHost=$(_bwssh_target_host $cmd)
-
-while read line; do
-	if [[ "$(echo $line | grep '^#')" != "" ]]; then
-		continue
-	fi
-	conf=($(echo $line | tr ',' "\n"))
-	host=${conf[0]}
-	objectId=${conf[1]}
-	if [[ "$host" == "" || "$objectId" == "" ]]; then
-		continue
-	fi
-	if [[ -n "$targetHost" && "$targetHost" == *"$host"* ]]; then
-		if confirmBwssh; then
-			useConf=1
-			confLine=$line
-		fi
-		break  # Exit loop after first match to prevent multiple prompts
-	fi
-done <  <(grep . ~/.bwssh)
-
-if [[ "$useConf" == "0" ]]; then
+if [[ "$(which bw)" == "" ]]; then
+	ui_err "bw command required — install from https://bitwarden.com/download/"
 	$cmd
+	return
+fi
+
+# No config file → behave exactly like plain ssh/scp
+if [[ ! -f "$BWSSH_CONFIG" ]]; then
+	$cmd
+	return
+fi
+
+targetHost=$(_bwssh_target_host $cmd)
+useConf=0
+confHost=""
+confId=""
+confLabel=""
+
+if [[ -n "$targetHost" ]]; then
+	while read -r pattern objectId label; do
+		[[ -z "$pattern" || -z "$objectId" || "$pattern" == \#* ]] && continue
+		autoYes=0
+		if [[ "$pattern" == !* ]]; then
+			autoYes=1
+			pattern="${pattern#!}"
+		fi
+		if [[ "$targetHost" == *"$pattern"* ]]; then
+			if (( autoYes )) || ui_confirm "$targetHost — autofill \"${label:-${objectId:0:8}…}\"?"; then
+				useConf=1
+				confHost=$pattern
+				confId=$objectId
+				confLabel=$label
+			fi
+			break  # first match wins; never prompt twice
+		fi
+	done < <(tr ',' ' ' < "$BWSSH_CONFIG")
+fi
+
+if (( useConf )); then
+	# On credential failure, fall back to a plain connection so the user
+	# can still type the password by hand
+	doBwssh "$confHost" "$confId" "$confLabel" || $cmd
 else
-	doBwssh $confLine
+	$cmd
 fi

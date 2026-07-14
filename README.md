@@ -8,6 +8,7 @@ A Bitwarden CLI session management and SSH auto-login integration toolkit.
 - **SSH auto-login**: Automatically inject credentials for SSH connections
 - **Kerberos auto-login**: `binit` wraps `kinit` and auto-fills the password from Bitwarden
 - **Error recovery**: Automatically regenerates sessions when expired or invalid
+- **`bwtkt` CLI**: `bwtkt list` / `bwtkt add` / `bwtkt doctor` to manage host and principal mappings
 
 ## Installation
 
@@ -58,7 +59,10 @@ If you prefer manual configuration or the setup script doesn't work:
 ```
 bwtkt/
 ├── bwtkt-functions.sh           # Bitwarden wrapper functions (session management)
+├── bwtkt-ui.sh                  # Shared terminal UI helpers (colors, prompts)
 ├── setup.sh                     # Interactive setup script for new users
+├── bin/
+│   └── bwtkt                    # Management CLI: list / add / doctor
 ├── bitwarden-ssh-auto-login/    # SSH auto-login components
 │   ├── bwssh                    # SSH wrapper script
 │   └── bwssh.expect             # Expect script for credential injection
@@ -77,26 +81,35 @@ User files (created by setup):
 
 ### SSH Auto-login Setup
 
-If you want SSH auto-login functionality, create `~/.bwssh` with entries in the format:
+If you want SSH auto-login functionality, create `~/.bwssh` with entries in the format
+(whitespace- or comma-separated; `#` comments allowed):
 ```
-hostname,bitwarden-object-id
+<host-pattern>  <bitwarden-object-id>  [label...]
 ```
 
 Example:
 ```
-lxplus.cern.ch,12345678-1234-1234-1234-123456789abc
-server.example.com,a1b2c3d4-e5f6-7890-abcd-ef1234567890
+lxplus.cern.ch   12345678-1234-1234-1234-123456789abc  CERN
+!dev.example.com a1b2c3d4-e5f6-7890-abcd-ef1234567890  dev box
 ```
 
-### Finding Bitwarden Object IDs
+Patterns are matched as substrings of the destination host only. A `!` prefix
+skips the confirmation prompt for that host. The optional label is shown in
+prompts instead of the raw object ID.
 
-To find the object IDs for your SSH credentials:
+### Managing entries
+
+The easiest way is the `bwtkt` CLI (searches your vault interactively, needs `jq`):
 ```bash
-# Search for items and show clean name/ID output
-bw list items --search "server" | jq '.[] | {name, id}'
+bwtkt list                    # show all configured hosts and principals
+bwtkt add lxplus.cern.ch      # map an ssh host to a vault item
+bwtkt add -k CERN.CH          # map a kerberos principal (for binit)
+bwtkt doctor                  # sanity-check the installation
+```
 
-# Get a specific item's details
-bw get item "server-name"
+Or find object IDs by hand:
+```bash
+bw list items --search "server" | jq '.[] | {name, id}'
 ```
 
 ## Usage
@@ -105,7 +118,7 @@ bw get item "server-name"
 
 ```bash
 # Regenerate Bitwarden session (if needed)
-bw --regenerate-session-key
+bw relogin
 
 # SSH with auto-login (if configured in ~/.bwssh)
 ssh user@hostname
@@ -118,7 +131,12 @@ binit                    # default principal
 binit user@REALM.ORG     # explicit principal; kinit options pass through
 ```
 
-### Session Management and Securit Notes
+Connections to hosts without a config entry behave exactly like plain
+`ssh`/`scp` — the wrapper stays silent. Logins that succeed without a
+password prompt (Kerberos/GSSAPI ticket, public key) are handed over
+untouched.
+
+### Session Management and Security Notes
 
 The toolkit automatically:
 - Creates session files in `/var/root/.bitwarden.session` (root access only)

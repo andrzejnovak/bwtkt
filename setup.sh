@@ -193,7 +193,7 @@ fi
 echo
 echo "New features after setup:"
 echo "• Enhanced 'bw' command with automatic session management"
-echo "   • A priviledged (sudo-only accessible) file /var/root/.bitwarden.session is used to store the session key."
+echo "   • A privileged (sudo-only accessible) file /var/root/.bitwarden.session is used to store the session key."
 echo "• SSH auto-login: ssh user@hostname (uses Bitwarden credentials if configured)"
 echo "• SCP auto-login: scp file user@hostname:/path (uses Bitwarden credentials if configured)"
 echo

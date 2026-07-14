@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# bwtkt — manage Bitwarden auto-login mappings for bwssh and binit.
+
+BWTKT_DIR="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
+source "${BWTKT_DIR}/bwtkt-ui.sh"
+UI_PREFIX=bwtkt
+
+usage() {
+	cat <<'EOF'
+bwtkt — Bitwarden auto-login toolkit
+
+Usage:
+  bwtkt list                 show configured ssh hosts and kerberos principals
+  bwtkt add <host-pattern>   map an ssh host to a vault item (searches the vault)
+  bwtkt add -k <pattern>     map a kerberos principal instead (~/.binit)
+  bwtkt doctor               check the installation
+
+Config formats (whitespace- or comma-separated, '#' comments):
+  ~/.bwssh    <host-pattern>  <object-id>  [label...]     ('!' prefix = no confirm)
+  ~/.binit    <principal-pattern>  <object-id>  [label...]
+              default  <principal>
+EOF
+}
+
+_print_entries() {
+	local heading=$1 conf=$2
+	[[ -f "$conf" ]] || return 0
+	echo "${_ui_bold}${heading}${_ui_reset}  ($conf)"
+	local pattern id label flag
+	while read -r pattern id label; do
+		[[ -z "$pattern" || "$pattern" == \#* ]] && continue
+		if [[ "$pattern" == "default" ]]; then
+			printf '   %-30s %s\n' "(default principal)" "$id"
+			continue
+		fi
+		flag=" "
+		[[ "$pattern" == !* ]] && { flag="!"; pattern="${pattern#!}"; }
+		printf '  %s%-30s %-24s %.8s…\n' "$flag" "$pattern" "${label:--}" "$id"
+	done < <(tr ',' ' ' < "$conf")
+}
+
+cmd_list() {
+	_print_entries "SSH hosts" ~/.bwssh
+	echo
+	_print_entries "Kerberos principals" ~/.binit
+	echo
+	echo "${_ui_bold}Tips${_ui_reset}: '!' before a host pattern skips the confirmation prompt;"
+	echo "the label column is optional and purely cosmetic."
+}
+
+cmd_add() {
+	local conf="$HOME/.bwssh"
+	if [[ "$1" == "-k" ]]; then
+		conf="$HOME/.binit"
+		shift
+	fi
+	local pattern=$1
+	if [[ -z "$pattern" ]]; then
+		ui_err "usage: bwtkt add [-k] <pattern>"
+		return 1
+	fi
+	if ! command -v jq &>/dev/null; then
+		ui_err "jq is required for 'bwtkt add' — install it or edit $conf by hand"
+		return 1
+	fi
+
+	# Get the session-managed bw() wrapper if it isn't loaded yet
+	if [[ "$(type -t bw)" != "function" ]]; then
+		if [[ -f ~/.config/bwtkt/bwtkt-user-init.sh ]]; then
+			source ~/.config/bwtkt/bwtkt-user-init.sh
+		else
+			source "${BWTKT_DIR}/bwtkt-functions.sh"
+		fi
+	fi
+
+	local term
+	read -r -p "$(_ui_tag) vault search term [$pattern]: " term < /dev/tty
+	term=${term:-$pattern}
+	ui_info "searching vault for \"$term\"…"
+
+	local items
+	items=$(bw list items --search "$term" 2>/dev/null | tail -1)
+	if [[ -z "$items" || "$items" == "[]" ]]; then
+		ui_err "no vault items match \"$term\""
+		return 1
+	fi
+
+	local -a lines
+	mapfile -t lines < <(jq -r '.[] | "\(.name)   [\(.login.username // "-")]"' <<<"$items")
+	local n=${#lines[@]} i
+	for ((i = 0; i < n; i++)); do
+		printf '  %2d) %s\n' $((i + 1)) "${lines[i]}"
+	done
+
+	local sel
+	read -r -p "$(_ui_tag) item number: " sel < /dev/tty
+	if ! [[ "$sel" =~ ^[0-9]+$ ]] || (( sel < 1 || sel > n )); then
+		ui_err "invalid selection"
+		return 1
+	fi
+
+	local id name
+	id=$(jq -r ".[$((sel - 1))].id" <<<"$items")
+	name=$(jq -r ".[$((sel - 1))].name" <<<"$items")
+	printf '%s  %s  %s\n' "$pattern" "$id" "$name" >> "$conf"
+	chmod 600 "$conf" 2>/dev/null
+	ui_ok "added: $pattern → \"$name\"  ($conf)"
+}
+
+cmd_doctor() {
+	local fails=0
+
+	_have() {
+		if command -v "$1" &>/dev/null; then
+			ui_ok "$1 found ($(command -v "$1"))"
+		else
+			ui_err "$1 not found${2:+ — $2}"
+			(( fails++ ))
+		fi
+	}
+	_have bw "install from https://bitwarden.com/download/"
+	_have expect "needed by bwssh"
+	_have kinit "needed by binit"
+	_have jq "needed by 'bwtkt add' (optional)"
+
+	if [[ -f ~/.config/bwtkt/bwtkt-user-init.sh ]]; then
+		ui_ok "user init script present (~/.config/bwtkt/bwtkt-user-init.sh)"
+		if grep -qF "bwtkt-user-init.sh" ~/.bashrc 2>/dev/null; then
+			ui_ok "sourced from ~/.bashrc"
+		else
+			ui_warn "not referenced in ~/.bashrc — run setup.sh"
+		fi
+	else
+		ui_warn "no user init script — run setup.sh"
+	fi
+
+	local conf
+	for conf in ~/.bwssh ~/.binit; do
+		if [[ -f "$conf" ]]; then
+			local perms
+			perms=$(stat -c '%a' "$conf" 2>/dev/null)
+			if [[ "$perms" == 600 ]]; then
+				ui_ok "$conf present (0600)"
+			else
+				ui_warn "$conf has mode $perms — consider: chmod 600 $conf"
+			fi
+		else
+			ui_warn "$conf not configured"
+		fi
+	done
+
+	if sudo -n test -f /var/root/.bitwarden.session 2>/dev/null; then
+		local sperms
+		sperms=$(sudo -n stat -c '%a %U' /var/root/.bitwarden.session 2>/dev/null)
+		if [[ "$sperms" == "600 root" ]]; then
+			ui_ok "session file present (0600 root)"
+		else
+			ui_err "session file has '$sperms' — run: sudo chmod 600 /var/root/.bitwarden.session"
+			(( fails++ ))
+		fi
+		sudo -k
+	else
+		ui_info "session file not checked (needs sudo) — run 'sudo true' first to verify it"
+	fi
+
+	(( fails == 0 )) && ui_ok "all required checks passed" || ui_err "$fails problem(s) found"
+	return $(( fails > 0 ))
+}
+
+case "$1" in
+	list) cmd_list ;;
+	add) shift; cmd_add "$@" ;;
+	doctor) cmd_doctor ;;
+	-h | --help | help | '') usage ;;
+	*)
+		ui_err "unknown command: $1"
+		usage
+		exit 1
+		;;
+esac

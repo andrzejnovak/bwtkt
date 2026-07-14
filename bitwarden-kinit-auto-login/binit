@@ -6,9 +6,10 @@
 #   matched against ~/.binit to find the Bitwarden item holding the password;
 #   if no entry matches, binit falls back to plain interactive kinit.
 #
-# Config (~/.binit): lines of "<principal-pattern> <bitwarden-object-id>".
+# Config (~/.binit): lines of "<principal-pattern> <object-id> [label...]".
 #   A line "default <principal>" sets the principal used when none is given
-#   on the command line. '#' comments and blank lines are ignored.
+#   on the command line. '#' comments and blank lines are ignored. The
+#   optional label is shown in messages instead of the raw object id.
 #
 # Environment overrides:
 #   BINIT_CONFIG  config file (default ~/.binit)
@@ -21,7 +22,34 @@ CONFIG_FILE="${BINIT_CONFIG:-$HOME/.binit}"
 KINIT_BIN="${BINIT_KINIT:-kinit}"
 BWTKT_INIT="${BWTKT_INIT:-$HOME/.config/bwtkt/bwtkt-user-init.sh}"
 
-err() { echo >&2 "binit: $*"; }
+if [[ -f "$SCRIPT_DIR/../bwtkt-ui.sh" ]]; then
+	source "$SCRIPT_DIR/../bwtkt-ui.sh"
+else
+	ui_info() { echo >&2 "binit ▸ $*"; }
+	ui_ok()   { ui_info "$@"; }
+	ui_warn() { ui_info "$@"; }
+	ui_err()  { ui_info "$@"; }
+fi
+UI_PREFIX=binit
+
+err() { ui_err "$*"; }
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+	cat <<'EOF'
+binit — kinit with the password auto-filled from Bitwarden
+
+Usage: binit [kinit options] [principal]
+  All arguments pass through to kinit. The principal (last non-option
+  argument, or the "default" entry in ~/.binit, or the ticket cache) is
+  matched against ~/.binit to find the Bitwarden item; if nothing matches,
+  binit falls back to plain interactive kinit.
+
+Config (~/.binit):  <principal-pattern>  <object-id>  [label...]
+                    default  <principal>
+  Manage entries with: bwtkt list, bwtkt add -k <pattern>
+EOF
+	exit 0
+fi
 
 # --- resolve the principal from the command line -----------------------------
 # The principal is the last non-option argument. MIT kinit options that
@@ -58,11 +86,13 @@ fi
 
 # --- look up the Bitwarden object id ------------------------------------------
 object_id=""
+object_label=""
 if [[ -n "$principal" && -f "$CONFIG_FILE" ]]; then
-	while read -r pattern id _; do
+	while read -r pattern id label; do
 		[[ -z "$pattern" || -z "$id" || "$pattern" == "default" ]] && continue
 		if [[ "${principal,,}" == *"${pattern,,}"* ]]; then
 			object_id="$id"
+			object_label="$label"
 			break
 		fi
 	done < <(grep -Ev '^[[:space:]]*(#|$)' "$CONFIG_FILE" | tr ',' ' ')
@@ -70,9 +100,9 @@ fi
 
 if [[ -z "$object_id" ]]; then
 	if [[ -n "$principal" ]]; then
-		err "no ~/.binit entry matches '$principal', falling back to plain kinit"
+		ui_warn "no ~/.binit entry matches '$principal' — plain kinit"
 	else
-		err "no principal given and none in ~/.binit or the ticket cache, falling back to plain kinit"
+		ui_warn "no principal given or configured — plain kinit"
 	fi
 	exec "$KINIT_BIN" "$@"
 fi
@@ -119,7 +149,7 @@ fetch_password() {
 }
 
 password=""
-echo "binit: fetching password for $principal from Bitwarden..."
+ui_info "$principal ← \"${object_label:-${object_id:0:8}…}\""
 fetch_password || exit 1
 
 # --- run kinit -----------------------------------------------------------------
@@ -130,8 +160,9 @@ status=$?
 unset password
 
 if (( status == 0 )); then
-	klist 2>/dev/null | head -6
+	expiry=$(klist 2>/dev/null | awk '/krbtgt\// { print $3, $4; exit }')
+	ui_ok "$principal valid until ${expiry:-unknown}"
 else
-	err "kinit failed (exit $status)"
+	ui_err "kinit failed (exit $status)"
 fi
 exit $status
