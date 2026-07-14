@@ -150,6 +150,9 @@ fetch_password() {
 
 password=""
 ui_info "$principal ← \"${object_label:-${object_id:0:8}…}\""
+# Read the session key once in this shell so the command substitutions in
+# fetch_password inherit it instead of prompting for sudo per call
+[[ "$(type -t bw)" == "function" ]] && bw --prime-session
 fetch_password || exit 1
 
 # --- run kinit -----------------------------------------------------------------

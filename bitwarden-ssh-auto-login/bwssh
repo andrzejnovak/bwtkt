@@ -31,6 +31,9 @@ doBwssh() {
 				return 1
 			fi
 		fi
+		# Read the session key once in this shell: the command substitutions
+		# below run in subshells and would otherwise each prompt for sudo
+		bw --prime-session
 		if output=$(bw get password $objectId 2>&1); then
 			# The wrapper may print session chatter before the password;
 			# the password is always the last line.

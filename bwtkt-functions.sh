@@ -111,6 +111,14 @@ bw() {
     sudo -k                       # De-elevate privileges, only doing this now so _read_token_from_file can resuse the same sudo session
     ;;
 
+  '--prime-session')
+    # Read the session key into this shell's memory (one sudo prompt,
+    # timestamp dropped immediately). Callers that fetch credentials in
+    # command substitutions should prime first: subshells inherit the key,
+    # so multiple fetches cost no further prompts.
+    _read_token_from_file
+    ;;
+
   'login' | 'logout' | 'config')
     ${bw_exec} "$@"
     ;;
