@@ -166,7 +166,7 @@ cmd_doctor() {
 	fi
 
 	local conf
-	for conf in ~/.bwssh ~/.binit; do
+	for conf in "${BWSSH_CONFIG:-$HOME/.bwssh}" "${BINIT_CONFIG:-$HOME/.binit}"; do
 		if [[ -f "$conf" ]]; then
 			local perms
 			perms=$(stat -c '%a' "$conf" 2>/dev/null)

@@ -192,8 +192,11 @@ else
 fi
 echo
 echo "New features after setup:"
-echo "• Enhanced 'bw' command with automatic session management"
+echo "• Enhanced 'bw' command with automatic session management ('bw relogin' to renew)"
 echo "   • A privileged (sudo-only accessible) file /var/root/.bitwarden.session is used to store the session key."
 echo "• SSH auto-login: ssh user@hostname (uses Bitwarden credentials if configured)"
 echo "• SCP auto-login: scp file user@hostname:/path (uses Bitwarden credentials if configured)"
+echo "• Kerberos auto-login: binit [principal] fills kinit's password from Bitwarden (~/.binit)"
+echo "• bwtkt CLI: 'bwtkt list' / 'bwtkt add <host>' / 'bwtkt doctor' to manage mappings"
+echo "  (first ssh to an unknown host also offers to link it on the spot)"
 echo
