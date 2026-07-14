@@ -11,6 +11,17 @@ if {[info exists env(BWSSH_TOTP)]} {
     unset env(BWSSH_TOTP)
 }
 
+# Hand the session over to the user. interact requires a terminal on stdin;
+# without one (scp, batch use) relay output until the command finishes —
+# with no timeout, so long transfers aren't cut off.
+proc handoff {} {
+	if {[catch {exec test -t 0 <@stdin}]} {
+		expect -timeout -1 eof
+	} else {
+		interact
+	}
+}
+
 spawn {*}$cmd
 
 expect {
@@ -42,7 +53,7 @@ expect {
 				}
 				timeout {
 					# Assume interactive session after 2FA
-					interact
+					handoff
 				}
 			}
 		} else {
@@ -55,14 +66,24 @@ expect {
 				}
 				timeout {
 					# Assume it's an interactive session, start interact mode
-					interact
+					handoff
 				}
 			}
 		}
 	}
+	-re "Last login" {
+		# Logged in without a password prompt (GSSAPI ticket, pubkey, ...)
+		handoff
+	}
+	-re {[$#%>] $} {
+		# Shell-prompt-looking output before any password prompt: already
+		# logged in via some other method
+		handoff
+	}
 	timeout {
-		puts "Timeout waiting for password prompt"
-		exit 1
+		# No password prompt appeared; assume some other auth succeeded and
+		# hand the session over instead of killing it
+		handoff
 	}
 	eof {
 		puts "Connection closed unexpectedly"
