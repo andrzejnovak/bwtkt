@@ -49,8 +49,9 @@ doBwssh() {
 		# Try to get password - capture both output and exit code
 		local output
 		if output=$(bw get password $objectId 2>&1); then
-			# Command succeeded, we have the password
-			local password="$output"
+			# Command succeeded, we have the password. The bw wrapper may
+			# print session chatter first; the password is the last line.
+			local password="${output##*$'\n'}"
 		else
 			# Command failed, check if it's a session issue
 			if [[ "$output" =~ (Invalid master password|Session key is invalid|mac failed|You are not logged in) ]]; then
@@ -60,7 +61,7 @@ doBwssh() {
 					echo "Session regenerated, retrying credential retrieval..."
 					# Try again after regeneration
 					if output=$(bw get password $objectId 2>&1); then
-						local password="$output"
+						local password="${output##*$'\n'}"
 					else
 						echo "Failed to get password even after session regeneration."
 						return 1
@@ -76,8 +77,9 @@ doBwssh() {
 			fi
 		fi
 		
-		# Get TOTP - session should be valid now
+		# Get TOTP - session should be valid now (last line, see above)
 		local pin=$(bw get totp $objectId 2>/dev/null)
+		pin="${pin##*$'\n'}"
 	else
 		echo "bw wrapper function not available, using raw bw command..."
 		# Fall back to raw bw command
@@ -95,7 +97,10 @@ doBwssh() {
 		return 1
 	fi
 
-	/usr/bin/expect ${SCRIPT_DIR}/bwssh.expect "$cmd" "$password" "$pin"
+	# Pass secrets via the environment, not argv: /proc/*/cmdline is
+	# world-readable and expect stays alive for the whole ssh session.
+	# Absolute expect path avoids snap confinement issues.
+	BWSSH_PASSWORD="$password" BWSSH_TOTP="$pin" /usr/bin/expect ${SCRIPT_DIR}/bwssh.expect "$cmd"
 }
 
 if [[ ! -f ~/.bwssh ]]; then

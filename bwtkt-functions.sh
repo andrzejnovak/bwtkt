@@ -94,8 +94,10 @@ bw() {
     
     sudo rm -f /var/root/.bitwarden.session && ${bw_exec} logout 2>/dev/null # Invalidate all existing sessions
 
-    ${bw_exec} login "${BW_USER}" --raw | sudo tee /var/root/.bitwarden.session &>/dev/null # Generate new session key
-    sudo chmod 600 "$bw_session_file" # sudo tee creates it world-readable; restrict to root
+    # Pre-create the session file root-only: sudo tee would create it 0644,
+    # leaving the key world-readable until a later chmod
+    sudo install -m 600 -o root /dev/null "$bw_session_file"
+    ${bw_exec} login "${BW_USER}" --raw | sudo tee "$bw_session_file" &>/dev/null # Generate new session key
 
     _read_token_from_file --force # Read the new session key for immediate use
     sudo -k                       # De-elevate privileges, only doing this now so _read_token_from_file can resuse the same sudo session
@@ -121,7 +123,9 @@ bw() {
         echo "Session regenerated successfully. Retrying command..."
         # Now retry the original command
         _read_token_from_file --force
-        ${bw_exec} "$@" --session "$bw_session"
+        # Pass the session via the environment, not --session: argv is
+        # world-readable in /proc/*/cmdline, the environment is not
+        BW_SESSION="$bw_session" ${bw_exec} "$@"
       else
         echo "Failed to regenerate session."
         sudo -k  # Clear cache on error
@@ -129,7 +133,7 @@ bw() {
       fi
     else
       # We have a valid session, run the command
-      ${bw_exec} "$@" --session "$bw_session"
+      BW_SESSION="$bw_session" ${bw_exec} "$@"
     fi
     
     # Don't clear sudo cache after successful operations - let it persist for subsequent calls

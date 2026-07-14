@@ -1,7 +1,15 @@
 set timeout 20
 set cmd [lindex $argv 0]
-set password [lindex $argv 1]
-set totp [lindex $argv 2]
+
+# Secrets arrive via the environment (argv would be world-readable in
+# /proc/*/cmdline); scrub them so the spawned command doesn't inherit them
+set password $env(BWSSH_PASSWORD)
+unset env(BWSSH_PASSWORD)
+set totp ""
+if {[info exists env(BWSSH_TOTP)]} {
+    set totp $env(BWSSH_TOTP)
+    unset env(BWSSH_TOTP)
+}
 
 spawn {*}$cmd
 

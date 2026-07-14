@@ -6,8 +6,8 @@ to the `bwssh` wrapper in [bitwarden-ssh-auto-login](../bitwarden-ssh-auto-login
 
 ```bash
 binit                     # default principal from ~/.binit (or ticket cache)
-binit anovak@CERN.CH      # explicit principal
-binit -l 7d -r 30d anovak@CERN.CH   # all kinit options pass through
+binit user@CERN.CH        # explicit principal
+binit -l 7d -r 30d user@CERN.CH     # all kinit options pass through
 ```
 
 ## How it works
@@ -38,7 +38,7 @@ Create `~/.binit`:
 
 ```
 # <principal-pattern>  <bitwarden-object-id>
-default  anovak@CERN.CH
+default  user@CERN.CH
 CERN.CH  12345678-1234-1234-1234-123456789abc
 ```
 
